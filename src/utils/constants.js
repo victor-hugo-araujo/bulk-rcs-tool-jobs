@@ -1,0 +1,66 @@
+export const SMS_LIMITS = {
+  MAX_CONTACTS_PER_REQUEST: 100000,
+  MAX_MESSAGE_LENGTH: 1600,
+}
+
+export const SMS_SETTINGS_DEFAULTS = {
+  estimatedCostPerSegment: 0.0075,
+  messageDelay: 300, // Default 0.3 seconds delay between messages (in milliseconds)
+}
+
+export const DELAY_SETTINGS = {
+  MIN_DELAY: 100, // Minimum 0.1 seconds (in milliseconds) - no 0 delay on slider
+  MAX_DELAY: 10000, // Maximum 10 seconds delay (in milliseconds)
+  DEFAULT_DELAY: 300, // Default 0.3 seconds (in milliseconds)
+  // Preset values in milliseconds
+  PRESETS: {
+    NO_DELAY: 0,
+    FAST: 100,      // 0.1s
+    DEFAULT: 300,   // 0.3s  
+    SAFE: 600,      // 0.6s
+    CONSERVATIVE: 1000  // 1s
+  }
+}
+
+export const CONTACT_STATUS = {
+  PENDING: 'pending',
+  SENT: 'sent',
+  FAILED: 'failed',
+}
+
+export const MESSAGE_STATUS = {
+  SENT: 'sent',
+  DELIVERED: 'delivered',
+  READ: 'read',
+  FAILED: 'failed',
+  PENDING: 'pending',
+}
+
+export const MESSAGE_DIRECTION = {
+  INBOUND: 'inbound',
+  OUTBOUND: 'outbound',
+}
+
+export const CHANNEL_TYPE = {
+  SMS: 'sms',
+  WHATSAPP: 'whatsapp',
+  RCS: 'rcs',
+}
+
+export const SUPPORTED_CHANNELS = [CHANNEL_TYPE.SMS, CHANNEL_TYPE.WHATSAPP, CHANNEL_TYPE.RCS]
+
+export const API_ENDPOINTS = {
+  SEND_BULK_SMS: '/api/send-bulk-sms',
+  SCHEDULE_SMS: '/api/schedule-sms',
+  CONTENT_TEMPLATES: '/api/content-templates',
+  SMS_PRICING: '/api/sms-pricing',
+  WHATSAPP_RATE_CARDS: '/api/whatsapp-rate-cards',
+  CONVERSATIONS: '/api/conversations',
+  CONVERSATION_RESOLVE: '/api/conversations/resolve',
+  CONVERSATIONS_TOKEN: '/api/conversations-token',
+  CONVERSATION_SUBSCRIBE: '/api/subscribe-conversation',
+  INCOMING_MESSAGE: '/api/incoming-message',
+  SEND_REPLY: '/api/send-reply',
+  SEND_TEMPLATE_REPLY: '/api/send-reply-template',
+  MESSAGE_STATUS: '/api/message-status',
+}

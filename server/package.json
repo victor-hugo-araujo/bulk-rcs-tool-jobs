@@ -1,0 +1,20 @@
+{
+  "name": "bulk-rcs-server",
+  "version": "1.0.0",
+  "description": "Backend API + worker for Bulk RCS/SMS/WhatsApp Sender",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "p-limit": "^6.1.0",
+    "papaparse": "^5.5.3",
+    "twilio": "^5.12.1"
+  }
+}

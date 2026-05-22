@@ -1,0 +1,82 @@
+import SendingPanel from './SendingPanel'
+import DelayConfiguration from './DelayConfiguration'
+import AccordionSection from './AccordionSection'
+
+const SendingSection = ({
+  isExpanded,
+  onToggle,
+  canSend,
+  isMessageConfigured,
+  contentTemplate,
+  message,
+  contacts,
+  getMessageAnalytics,
+  smsPricingCountry,
+  whatsAppPricingCountry,
+  twilioConfig,
+  senderConfig,
+  onSendMessages,
+  onScheduleMessages,
+  sending,
+  progress,
+  results,
+  scheduledSending,
+  updateScheduling,
+  lastScheduledMessage,
+  clearLastScheduledMessage,
+  messageDelay,
+  onDelayChange,
+  getEstimatedCompletionTime,
+  formatEstimatedTime
+}) => {
+  const sendingStatus = canSend ? 
+    <span className="text-green-600 text-sm font-medium">✓ Ready to send</span> : 
+    <span className="text-red-600 text-sm font-medium">✗ Not ready</span>
+
+  return (
+    <AccordionSection
+      id="sending"
+      title="Send Messages"
+      status={sendingStatus}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+      animationDelay="0.5s"
+    >
+      {/* Delay Configuration */}
+      <div className="mb-8">
+        <DelayConfiguration
+          messageDelay={messageDelay}
+          onDelayChange={onDelayChange}
+          contactCount={contacts?.length || 0}
+          getEstimatedCompletionTime={getEstimatedCompletionTime}
+          formatEstimatedTime={formatEstimatedTime}
+        />
+      </div>
+
+      <SendingPanel
+        isMessageConfigured={isMessageConfigured}
+        contentTemplate={contentTemplate}
+        message={message}
+        contacts={contacts}
+        getMessageAnalytics={getMessageAnalytics}
+        smsPricingCountry={smsPricingCountry}
+        whatsAppPricingCountry={whatsAppPricingCountry}
+        twilioConfig={twilioConfig}
+        senderConfig={senderConfig}
+        canSend={canSend}
+        onSendMessages={onSendMessages}
+        onScheduleMessages={onScheduleMessages}
+        sending={sending}
+        progress={progress}
+        results={results}
+        scheduledSending={scheduledSending}
+        updateScheduling={updateScheduling}
+        lastScheduledMessage={lastScheduledMessage}
+        clearLastScheduledMessage={clearLastScheduledMessage}
+        messageDelay={messageDelay}
+      />
+    </AccordionSection>
+  )
+}
+
+export default SendingSection
