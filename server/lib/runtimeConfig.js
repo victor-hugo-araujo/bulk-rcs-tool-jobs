@@ -33,7 +33,9 @@ const baseDefaults = {
   // reasonable. Dedup defenses upstream guarantee that no chunk contains
   // duplicate recipients regardless of size.
   chunkSize: 3000,
-  maxConcurrency: 1,
+  // 2 parallel batches per job keeps the per-wave footprint at 6k DISTINCT
+  // recipients while still meaningfully shortening 100k+ jobs.
+  maxConcurrency: 2,
   delayBetweenBatchesMs: 500,
   maxRetries429: 3,
   maxRetries5xx: 2,
