@@ -1,7 +1,8 @@
-// Client for the local credentials + senders persistence API.
+// Client for the local senders persistence API.
 //
-// ⚠️ The data managed by these endpoints lives in plaintext on the operator's
-// machine. Never call these endpoints from a hosted version of this app.
+// Credentials are intentionally NOT persisted by this project — they must be
+// entered each session in the Settings page. Only sender shortcuts (phone,
+// agent ID, Messaging Service SID) are saved.
 
 const handle = async (response) => {
   if (!response.ok) {
@@ -10,29 +11,6 @@ const handle = async (response) => {
   }
   return response.json()
 }
-
-export const listCredentials = () =>
-  fetch('/api/settings/credentials').then(handle)
-
-export const getCredential = (id) =>
-  fetch(`/api/settings/credentials/${id}`).then(handle)
-
-export const saveCredential = (credential) =>
-  fetch('/api/settings/credentials', {
-    method: credential.id ? 'PUT' : 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(credential)
-  }).then(handle)
-
-export const updateCredential = (id, credential) =>
-  fetch(`/api/settings/credentials/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(credential)
-  }).then(handle)
-
-export const deleteCredential = (id) =>
-  fetch(`/api/settings/credentials/${id}`, { method: 'DELETE' }).then(handle)
 
 export const listSenders = () =>
   fetch('/api/settings/senders').then(handle)

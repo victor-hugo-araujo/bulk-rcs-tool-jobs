@@ -1,10 +1,10 @@
 import React, { useState } from 'react'
 import { Eye, EyeOff, Key, User, Trash2 } from 'lucide-react'
 
-const TwilioSettings = ({ 
-  twilioConfig, 
-  updateTwilioConfig, 
-  clearTwilioConfig 
+const TwilioSettings = ({
+  twilioConfig,
+  updateTwilioConfig,
+  clearTwilioConfig
 }) => {
   const [showTokens, setShowTokens] = useState({
     authToken: false,

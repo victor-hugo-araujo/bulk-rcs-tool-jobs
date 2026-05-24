@@ -15,8 +15,12 @@
 // project's existing `{name}` placeholders to `{{name}}` so the UI experience
 // stays the same.
 
+import { runtimeConfig } from './runtimeConfig.js'
+
 const BULK_ENDPOINT = 'https://comms.twilio.com/v1/Messages'
-export const BATCH_SIZE = 5000 // well under the 10k Twilio limit; keeps payloads reasonable
+// Absolute upper bound for any batch sent. The runtime config can set a
+// SMALLER chunk size via env, but never larger than this.
+export const MAX_BATCH_SIZE = 10000
 
 // Convert app-style `{name}` placeholders to Liquid `{{ name | default: '' }}`.
 //
@@ -79,8 +83,8 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
   if (!Array.isArray(contacts) || contacts.length === 0) {
     return { successful: [], failed: [] }
   }
-  if (contacts.length > BATCH_SIZE) {
-    throw new Error(`Bulk batch size must be <= ${BATCH_SIZE}`)
+  if (contacts.length > MAX_BATCH_SIZE) {
+    throw new Error(`Bulk batch size must be <= ${MAX_BATCH_SIZE}`)
   }
 
   if (contentTemplate?.contentSid) {
@@ -95,7 +99,33 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
 
   const channelCfg = channelMap[channel] || channelMap.sms
 
-  const recipients = contacts.map((contact) => {
+  // Safety-net dedup. The CSV stream already drops duplicates; this is a
+  // second line of defense in case a future code path bypasses it (manual
+  // job creation, retry from a stale queue, etc.).
+  const seenAddresses = new Set()
+  const uniqueContacts = []
+  const droppedAsFailed = []
+  for (const contact of contacts) {
+    const key = normalizePhone(contact.phone).toLowerCase()
+    if (!key) {
+      droppedAsFailed.push({ contactId: contact.id, error: 'Empty or invalid phone' })
+      continue
+    }
+    if (seenAddresses.has(key)) {
+      droppedAsFailed.push({ contactId: contact.id, error: 'Duplicate recipient dropped before send' })
+      continue
+    }
+    seenAddresses.add(key)
+    uniqueContacts.push(contact)
+  }
+  if (droppedAsFailed.length > 0) {
+    console.warn(`[twilioBulkSender] Dropped ${droppedAsFailed.length} duplicate/empty recipient(s) before submitting batch of ${contacts.length}.`)
+  }
+  if (uniqueContacts.length === 0) {
+    return { successful: [], failed: droppedAsFailed }
+  }
+
+  const recipients = uniqueContacts.map((contact) => {
     const variables = contact.variables || {}
     const address = normalizePhone(contact.phone)
     return {
@@ -138,31 +168,67 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
     body.schedule = { sendAt: [new Date(scheduledAt).toISOString()] }
   }
 
+  // Retry loop for transient failures (429 throttling + 5xx).
+  // - Honors Retry-After if present.
+  // - Otherwise uses exponential backoff with jitter.
+  // - Max retries are configurable via env (runtimeConfig).
   let response, text, parsed
-  try {
-    response = await fetch(BULK_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader(twilioConfig),
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(body)
-    })
-    text = await response.text()
-    try { parsed = JSON.parse(text) } catch { /* leave raw */ }
-  } catch (networkErr) {
-    console.error('[twilioBulkSender] Network error calling Bulk API:', networkErr.message)
-    return {
-      successful: [],
-      failed: contacts.map((c) => ({ contactId: c.id, error: `Network error: ${networkErr.message}` }))
+  let attempt = 0
+  let consecutive429 = 0
+  let consecutive5xx = 0
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      response = await fetch(BULK_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader(twilioConfig),
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      text = await response.text()
+      try { parsed = JSON.parse(text) } catch { parsed = null }
+    } catch (networkErr) {
+      console.error('[twilioBulkSender] Network error calling Bulk API:', networkErr.message)
+      return {
+        successful: [],
+        failed: [
+          ...droppedAsFailed,
+          ...uniqueContacts.map((c) => ({ contactId: c.id, error: `Network error: ${networkErr.message}` }))
+        ]
+      }
     }
+
+    if (response.ok) break
+
+    const status = response.status
+    const retryable429 = status === 429 && consecutive429 < runtimeConfig.maxRetries429
+    const retryable5xx = status >= 500 && status < 600 && consecutive5xx < runtimeConfig.maxRetries5xx
+
+    if (!retryable429 && !retryable5xx) break // give up — error returned below
+
+    attempt++
+    if (status === 429) consecutive429++
+    if (status >= 500 && status < 600) consecutive5xx++
+
+    // Wait time: Retry-After header if provided, otherwise exponential backoff
+    // (1s, 2s, 4s, ...) with up to ±25% jitter to avoid synchronized retries.
+    const explicit = parseRetryAfter(response.headers)
+    const expoBase = Math.min(30000, 1000 * Math.pow(2, attempt - 1))
+    const jitter = expoBase * (Math.random() * 0.5 - 0.25)
+    const waitMs = explicit != null ? explicit : Math.max(250, Math.round(expoBase + jitter))
+
+    console.warn(`[twilioBulkSender] HTTP ${status} — retrying attempt ${attempt} after ${waitMs}ms${explicit != null ? ' (Retry-After honored)' : ' (exp backoff)'}`)
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+    // Loop continues
   }
 
   if (!response.ok) {
     const errMsg = parsed?.message || parsed?.error_message || parsed?.error || text || `HTTP ${response.status}`
-    // Verbose log for debugging — easy to remove once stable.
-    console.error('[twilioBulkSender] Twilio Bulk API error:')
+    console.error('[twilioBulkSender] Twilio Bulk API error (final, after retries):')
     console.error('  status :', response.status, response.statusText)
     console.error('  url    :', BULK_ENDPOINT)
     console.error('  body   :', JSON.stringify(body))
@@ -170,18 +236,38 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
 
     return {
       successful: [],
-      failed: contacts.map((c) => ({ contactId: c.id, error: `Bulk send failed (HTTP ${response.status}): ${errMsg}` }))
+      failed: [
+        ...droppedAsFailed,
+        ...uniqueContacts.map((c) => ({ contactId: c.id, error: `Bulk send failed (HTTP ${response.status}): ${errMsg}` }))
+      ],
+      status: response.status,
+      retries: attempt,
+      retryAfter: parseRetryAfter(response.headers)
     }
   }
 
   // 202 Accepted — Twilio took the batch and will process asynchronously.
   // We don't get per-recipient SIDs here; track delivery via Twilio Operations / Console logs.
   const operationId = response.headers?.get?.('operation-id') || response.headers?.get?.('operationid') || null
-  console.log(`[twilioBulkSender] Batch accepted — recipients=${contacts.length} operationId=${operationId || 'n/a'}`)
+  console.log(`[twilioBulkSender] Batch accepted — recipients=${uniqueContacts.length} operationId=${operationId || 'n/a'}${droppedAsFailed.length ? ` (+${droppedAsFailed.length} dropped)` : ''}`)
 
   return {
-    successful: contacts.map((c) => ({ contactId: c.id, messageSid: operationId })),
-    failed: [],
+    successful: uniqueContacts.map((c) => ({ contactId: c.id, messageSid: operationId })),
+    failed: droppedAsFailed,
     operationId
   }
+}
+
+// Read Retry-After header. Twilio may return seconds (integer) or an HTTP-date.
+function parseRetryAfter(headers) {
+  if (!headers || typeof headers.get !== 'function') return null
+  const v = headers.get('retry-after')
+  if (!v) return null
+  const asInt = Number(v)
+  if (Number.isFinite(asInt) && asInt >= 0) return asInt * 1000
+  const asDate = Date.parse(v)
+  if (!Number.isNaN(asDate)) {
+    return Math.max(0, asDate - Date.now())
+  }
+  return null
 }

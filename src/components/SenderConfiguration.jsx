@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Phone, MessageSquare, RefreshCw, AlertCircle, Sparkles } from 'lucide-react'
 
-const SenderConfiguration = ({ 
-  twilioConfig, 
-  senderConfig, 
-  updateSenderConfig 
+const SenderConfiguration = ({
+  twilioConfig,
+  senderConfig,
+  updateSenderConfig,
+  savedSenders = []
 }) => {
   const WHATSAPP_SANDBOX_NUMBER = '+14155238886'
   const [channel, setChannel] = useState(senderConfig?.channel || 'sms')
@@ -263,6 +264,41 @@ const SenderConfiguration = ({
           </p>
         )}
       </div>
+
+      {/* Saved-locally picker — applies to either sender type */}
+      {savedSenders.filter(s => s.channel === channel && s.type === senderType).length > 0 && (
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+          <label className="block text-xs font-medium text-amber-900 mb-2">
+            Use a saved sender ({channel.toUpperCase()} / {senderType === 'messaging-service' ? 'Messaging Service' : 'direct'})
+          </label>
+          <select
+            defaultValue=""
+            onChange={(e) => {
+              const sel = savedSenders.find(s => s.id === e.target.value)
+              if (!sel) return
+              if (senderType === 'phone') {
+                handlePhoneNumberChange(sel.value)
+              } else {
+                handleMessagingServiceChange(sel.value)
+              }
+              e.target.value = ''
+            }}
+            className="w-full px-3 py-2 border border-amber-300 bg-white rounded-lg focus:outline-none focus:shadow-lg"
+          >
+            <option value="">Select a saved sender…</option>
+            {savedSenders
+              .filter(s => s.channel === channel && s.type === senderType)
+              .map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — {s.value}
+                </option>
+              ))}
+          </select>
+          <p className="text-xs text-amber-700 mt-1">
+            Manage in <strong>Credentials &amp; Senders</strong>.
+          </p>
+        </div>
+      )}
 
       {/* Phone Number Input */}
       {senderType === 'phone' && (

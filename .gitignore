@@ -64,4 +64,3 @@ temp/
 server/data/
 
 # Local load-test config — contains Twilio credentials, never commit
-tools/config.test.sh

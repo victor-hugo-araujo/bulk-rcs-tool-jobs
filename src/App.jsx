@@ -8,6 +8,7 @@ import { useSettings } from './hooks/useSettings'
 import { useScheduler } from './hooks/useScheduler'
 import { useSMS } from './hooks/useSMS'
 import { useSavedSettings } from './hooks/useSavedSettings'
+import { useRuntimeConfig } from './hooks/useRuntimeConfig'
 
 // Components - Reorganized
 import AppHeader from './components/AppHeader'
@@ -18,6 +19,7 @@ import MessageSection from './components/MessageSection'
 import AnalyticsSection from './components/AnalyticsSection'
 import SendingSection from './components/SendingSection'
 import RepliesTabSection from './components/RepliesTabSection'
+import SavedSendersSection from './components/SavedSendersSection'
 import { MessageCircle, Send } from 'lucide-react'
 
 function App() {
@@ -34,6 +36,8 @@ function App() {
   const settingsHook = useSettings()
   const schedulerHook = useScheduler()
   const smsHook = useSMS()
+  const savedSettings = useSavedSettings()
+  const runtimeConfig = useRuntimeConfig()
 
   // Sidebar state - only one section can be active at a time
   const [activeSection, setActiveSection] = useState('settings') // Start with settings active
@@ -99,7 +103,7 @@ function App() {
       return
     }
 
-    try {
+    const attemptSend = async (dedupMode) => {
       await smsHook.sendBulkMessages({
         file: contactsHook.csvFile,
         contacts: contactsHook.contacts,
@@ -107,15 +111,45 @@ function App() {
         contentTemplate,
         mediaUrl,
         twilioConfig: settingsHook.twilioConfig,
-        senderConfig: settingsHook.senderConfig
-        // onContactUpdate removed — Bulk API doesn't return per-contact status,
-        // and iterating all contacts here was O(N²) with React state updates.
+        senderConfig: settingsHook.senderConfig,
+        dedupMode
       })
+    }
+
+    try {
+      await attemptSend('block')
     } catch (error) {
       console.error('Send error:', error)
-      // Cancellation is a user-initiated stop, not a failure. The worker
-      // surfaces it as `error: "Cancelled by user after N sent"` so we
-      // detect that string and show a neutral message.
+
+      // Duplicates detected — offer one-click retry with dedup.
+      if (error.code === 'DUPLICATES_DETECTED' && error.summary) {
+        const { rowsParsed, valid, invalid, duplicates, finalImported } = error.summary
+        const proceed = window.confirm(
+          `Your CSV contains duplicate recipients.\n\n` +
+          `  Total rows:        ${rowsParsed}\n` +
+          `  Valid:             ${valid}\n` +
+          `  Invalid:           ${invalid}\n` +
+          `  Duplicates:        ${duplicates}\n` +
+          `  Final (deduped):   ${finalImported}\n\n` +
+          `Sending the same person twice is rarely intentional. We recommend ` +
+          `retrying with automatic deduplication (only the first occurrence of ` +
+          `each number is kept).\n\n` +
+          `Retry with deduplication?`
+        )
+        if (!proceed) return
+        try {
+          await attemptSend('auto')
+        } catch (err) {
+          alert(`Failed to send messages: ${err.message}`)
+        }
+        return
+      }
+
+      if (error.code === 'RECIPIENTS_OVER_LIMIT') {
+        alert(`${error.message}\n\n${error.hint || ''}`)
+        return
+      }
+
       const isCancellation = /cancel/i.test(error.message)
       if (isCancellation) {
         alert(`Send cancelled — ${error.message}.`)
@@ -173,6 +207,12 @@ function App() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         
         <AppHeader />
+
+        {runtimeConfig?.safeTestMode && (
+          <div className="bg-yellow-50 border-b-2 border-yellow-400 px-6 py-3 text-sm text-yellow-900">
+            <strong>⚠️ SAFE_TEST_MODE active.</strong> Jobs are capped at {runtimeConfig.maxRecipientsPerJob} recipients, concurrency is forced to {runtimeConfig.maxConcurrency}, chunk size is {runtimeConfig.chunkSize}, and a {runtimeConfig.delayBetweenBatchesMs}ms delay is applied between batches. Unset <code className="bg-yellow-100 px-1 rounded">SAFE_TEST_MODE</code> to restore configured defaults.
+          </div>
+        )}
 
         <div className="w-full pt-4 border-b border-gray-200">
           <div className="px-6">
@@ -238,6 +278,7 @@ function App() {
                   clearTwilioConfig={settingsHook.clearTwilioConfig}
                   updateSenderConfig={settingsHook.updateSenderConfig}
                   isConfigurationComplete={isConfigurationComplete}
+                  savedSenders={savedSettings.senders}
                 />
               )}
 
@@ -289,6 +330,10 @@ function App() {
                   twilioConfig={settingsHook.twilioConfig}
                   senderConfig={settingsHook.senderConfig}
                 />
+              )}
+
+              {activeSection === 'senders' && (
+                <SavedSendersSection saved={savedSettings} />
               )}
 
               {activeSection === 'sending' && (

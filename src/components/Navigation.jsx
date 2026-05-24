@@ -1,4 +1,4 @@
-import { Settings, Users, MessageSquare, BarChart3, Send, CheckCircle, Menu, ChevronLeft, ChevronRight, RotateCcw, KeyRound } from 'lucide-react'
+import { Settings, Users, MessageSquare, BarChart3, Send, CheckCircle, Menu, ChevronLeft, ChevronRight, RotateCcw, Phone } from 'lucide-react'
 import { useState } from 'react'
 
 const Navigation = ({ 
@@ -43,10 +43,10 @@ const Navigation = ({
       description: 'Send & Results'
     },
     {
-      id: 'credentials',
-      label: 'Credentials & Senders',
-      icon: KeyRound,
-      description: 'Saved locally (advanced)'
+      id: 'senders',
+      label: 'Saved Senders',
+      icon: Phone,
+      description: 'Sender shortcuts for SMS / WhatsApp / RCS'
     }
   ]
 

@@ -2,17 +2,18 @@ import pLimit from 'p-limit'
 import { compact } from './db/database.js'
 import * as Jobs from './db/jobs.js'
 import * as Contacts from './db/contacts.js'
-import { sendBulkBatch, BATCH_SIZE } from './lib/twilioBulkSender.js'
+import { sendBulkBatch, MAX_BATCH_SIZE } from './lib/twilioBulkSender.js'
+import { runtimeConfig, SAFE_TEST_MODE } from './lib/runtimeConfig.js'
 
 // Only compact the DB after jobs large enough for the VACUUM cost to be worth
 // it. VACUUM rewrites the whole DB file; for a 50-contact job it's pure
-// overhead. Threshold tuned for the typical bulk-send workload.
+// overhead.
 const COMPACT_THRESHOLD = 1000
 
-// Max concurrent Twilio Bulk requests in flight PER JOB. Jobs themselves are
-// serialized (one job at a time globally) so concurrent users uploading many
-// large files don't compound the load on the Twilio side.
-const CONCURRENCY = Number(process.env.BULK_RCS_CONCURRENCY || 4)
+// Effective chunk/concurrency come from runtimeConfig (env-driven).
+const BATCH_SIZE = Math.min(runtimeConfig.chunkSize, MAX_BATCH_SIZE)
+const CONCURRENCY = runtimeConfig.maxConcurrency
+const DELAY_BETWEEN_BATCHES_MS = runtimeConfig.delayBetweenBatchesMs
 
 // Single, global queue of pending job ids. We process one job at a time so:
 //   - The Twilio Bulk API isn't hit with N×concurrency calls when users upload
@@ -79,12 +80,25 @@ async function processJob(jobId) {
   }
 
   Jobs.setStatus(jobId, 'processing')
-  console.log(`[worker] Job ${jobId} started — ${job.total} contacts on channel=${job.channel}`)
+  const t0 = Date.now()
+  console.log(JSON.stringify({
+    evt: 'job.start',
+    jobId,
+    channel: job.channel,
+    total: job.total,
+    chunkSize: BATCH_SIZE,
+    concurrency: CONCURRENCY,
+    delayBetweenBatchesMs: DELAY_BETWEEN_BATCHES_MS,
+    estimatedApiRequests: Math.ceil(job.total / BATCH_SIZE)
+  }))
 
   const limit = pLimit(CONCURRENCY)
   let totalSent = 0
   let totalFailed = 0
   let wasCancelled = false
+  let apiRequestsSent = 0
+  let retries429 = 0
+  let retries5xx = 0
 
   while (true) {
     // Cancellation check between batches. We read fresh status from the DB so
@@ -126,6 +140,7 @@ async function processJob(jobId) {
 
     let batchSent = 0
     let batchFailed = 0
+    apiRequestsSent += results.length
     for (const r of results) {
       if (r.successful?.length) {
         Contacts.markSentBulk(r.successful)
@@ -135,13 +150,28 @@ async function processJob(jobId) {
         Contacts.markFailedBulk(r.failed)
         batchFailed += r.failed.length
       }
+      if (r.status === 429) retries429++
+      if (r.status >= 500 && r.status < 600) retries5xx++
     }
 
     totalSent += batchSent
     totalFailed += batchFailed
     Jobs.incrementCounters(jobId, { successful: batchSent, failed: batchFailed })
 
-    console.log(`[worker] Job ${jobId} progress — sent=${totalSent} failed=${totalFailed}`)
+    console.log(JSON.stringify({
+      evt: 'job.progress',
+      jobId,
+      sent: totalSent,
+      failed: totalFailed,
+      apiRequestsSent,
+      retries429,
+      retries5xx
+    }))
+
+    // Optional throttle between batch waves. Default 500ms; skipped when 0.
+    if (DELAY_BETWEEN_BATCHES_MS > 0) {
+      await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES_MS))
+    }
   }
 
   if (wasCancelled) {
@@ -166,7 +196,19 @@ async function processJob(jobId) {
   }
 
   const finalLabel = wasCancelled ? 'cancelled' : 'done'
-  console.log(`[worker] Job ${jobId} ${finalLabel} — sent=${totalSent} failed=${totalFailed}`)
+  const durationMs = Date.now() - t0
+  console.log(JSON.stringify({
+    evt: 'job.end',
+    jobId,
+    outcome: finalLabel,
+    sent: totalSent,
+    failed: totalFailed,
+    apiRequestsSent,
+    retries429,
+    retries5xx,
+    durationMs,
+    throughputMsgPerSec: durationMs > 0 ? Math.round((totalSent * 1000) / durationMs) : 0
+  }))
 }
 
 // Recover any jobs that were left in 'pending', 'processing' or 'cancelling'

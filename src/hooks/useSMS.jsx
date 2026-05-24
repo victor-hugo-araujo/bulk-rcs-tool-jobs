@@ -59,7 +59,7 @@ export const useSMS = () => {
     tick()
   }, [stopPolling])
 
-  const sendBulkMessages = useCallback(async ({ file, contacts, message, contentTemplate = null, mediaUrl = '', twilioConfig, senderConfig, onContactUpdate, scheduledAt = null }) => {
+  const sendBulkMessages = useCallback(async ({ file, contacts, message, contentTemplate = null, mediaUrl = '', twilioConfig, senderConfig, onContactUpdate, scheduledAt = null, dedupMode = 'block' }) => {
     if (!file) {
       throw new Error('CSV file is required — re-upload the contacts to send')
     }
@@ -69,7 +69,7 @@ export const useSMS = () => {
     setResults({ success: 0, failed: 0, errors: [] })
 
     try {
-      const { jobId, invalid } = await createBulkJob({
+      const { jobId, summary } = await createBulkJob({
         file,
         channel: senderConfig?.channel || 'sms',
         message,
@@ -77,7 +77,8 @@ export const useSMS = () => {
         contentTemplate,
         senderConfig,
         twilioConfig,
-        scheduledAt
+        scheduledAt,
+        dedupMode
       })
 
       setCurrentJobId(jobId)
@@ -93,7 +94,7 @@ export const useSMS = () => {
           // The aggregate totals are surfaced via `progress` / `results`
           // already, which is what the UI shows during/after the job.
           if (job.error) reject(new Error(job.error))
-          else resolve({ success: job.successful, failed: job.failed, errors: job.error ? [job.error] : [], invalid })
+          else resolve({ success: job.successful, failed: job.failed, errors: job.error ? [job.error] : [], summary })
         })
       })
     } catch (error) {

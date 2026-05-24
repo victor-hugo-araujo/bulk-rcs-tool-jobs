@@ -1,9 +1,27 @@
 import { API_ENDPOINTS } from '../utils/constants'
 
 /**
- * Creates a bulk-send job by streaming the CSV file to the backend as multipart/form-data.
- * Returns { jobId, total, invalid, rowsParsed } on success.
+ * Creates a bulk-send job by streaming the CSV file to the backend.
+ * Returns { jobId, total, summary, dedupMode } on success.
+ *
+ * Throws a CreateJobError on 4xx so the caller can inspect:
+ *   - err.code:     'DUPLICATES_DETECTED' | 'RECIPIENTS_OVER_LIMIT' | ...
+ *   - err.summary:  { rowsParsed, valid, invalid, duplicates, finalImported }
+ *   - err.status:   HTTP status code
+ * This lets the UI offer "Retry with deduplication" instead of just showing a
+ * raw error message.
  */
+export class CreateJobError extends Error {
+  constructor(message, { code, summary, status, hint } = {}) {
+    super(message)
+    this.name = 'CreateJobError'
+    this.code = code
+    this.summary = summary
+    this.status = status
+    this.hint = hint
+  }
+}
+
 export const createBulkJob = async ({
   file,
   channel,
@@ -13,12 +31,14 @@ export const createBulkJob = async ({
   senderConfig,
   twilioConfig,
   scheduledAt = null,
+  dedupMode = 'block'
 }) => {
   if (!file) throw new Error('CSV file is required to create a job')
 
   const formData = new FormData()
   formData.append('channel', channel || 'sms')
   formData.append('message', message || '')
+  formData.append('dedupMode', dedupMode)
   if (mediaUrl) formData.append('mediaUrl', mediaUrl)
   if (contentTemplate) formData.append('contentTemplate', JSON.stringify(contentTemplate))
   formData.append('senderConfig', JSON.stringify(senderConfig || {}))
@@ -33,8 +53,19 @@ export const createBulkJob = async ({
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${response.status}`)
+    throw new CreateJobError(err.error || `HTTP ${response.status}`, {
+      code: err.code,
+      summary: err.summary,
+      status: response.status,
+      hint: err.hint
+    })
   }
+  return response.json()
+}
+
+export const getRuntimeConfig = async () => {
+  const response = await fetch('/api/runtime-config')
+  if (!response.ok) return null
   return response.json()
 }
 

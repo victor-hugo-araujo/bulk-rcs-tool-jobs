@@ -10,10 +10,11 @@ const SettingsSection = ({
   updateTwilioConfig,
   clearTwilioConfig,
   updateSenderConfig,
-  isConfigurationComplete
+  isConfigurationComplete,
+  savedSenders = []
 }) => {
-  const settingsStatus = isConfigurationComplete ? 
-    <span className="text-green-600 text-sm font-medium">✓ Configured</span> : 
+  const settingsStatus = isConfigurationComplete ?
+    <span className="text-green-600 text-sm font-medium">✓ Configured</span> :
     <span className="text-red-600 text-sm font-medium">✗ Not Configured</span>
 
   return (
@@ -29,7 +30,7 @@ const SettingsSection = ({
         {/* Twilio Configuration */}
         <div>
           <h3 className="text-base font-medium text-gray-900 mb-4">Twilio Configuration</h3>
-          <TwilioSettings 
+          <TwilioSettings
             twilioConfig={twilioConfig}
             updateTwilioConfig={updateTwilioConfig}
             clearTwilioConfig={clearTwilioConfig}
@@ -43,6 +44,7 @@ const SettingsSection = ({
             twilioConfig={twilioConfig}
             senderConfig={senderConfig}
             updateSenderConfig={updateSenderConfig}
+            savedSenders={savedSenders}
           />
         </div>
       </div>

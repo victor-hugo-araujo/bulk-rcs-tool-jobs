@@ -89,6 +89,17 @@ If you're hacking on the code, use `npm run dev` instead — it boots Vite (UI h
 4. Send now or schedule
 5. Open Replies (Beta) to monitor and respond to inbound messages
 
+## Deduplication policy
+
+Duplicate recipients in your CSV are detected on upload. By default the job
+is refused so you don't send the same person twice — you can opt into
+automatic deduplication by re-submitting with `dedupMode=auto`, which keeps
+the first occurrence of each number.
+
+The upload response includes a summary: `{ rowsParsed, valid, invalid,
+duplicates, finalImported }`. The UI surfaces this in a confirmation dialog
+when duplicates are present.
+
 ## How the bulk send works
 
 1. The user uploads a CSV via the UI. The file is streamed via `multipart/form-data` to `POST /api/jobs`.

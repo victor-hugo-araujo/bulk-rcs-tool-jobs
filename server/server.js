@@ -10,6 +10,7 @@ import app from './app.js';
 import { registerJobRoutes } from './routes/jobs.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { recoverOnBoot } from './worker.js';
+import { logConfigOnBoot } from './lib/runtimeConfig.js';
 
 const uuidv4 = () => crypto.randomUUID();
 
@@ -1954,6 +1955,7 @@ if (existsSync(DIST_DIR)) {
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 
 if (isDirectRun) {
+  logConfigOnBoot();
   try {
     recoverOnBoot();
   } catch (err) {
