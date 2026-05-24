@@ -1,7 +1,7 @@
 // Centralized, env-driven runtime configuration for the worker / sender.
 //
-// Defaults are intentionally conservative. Operators with negotiated capacity
-// should raise these via env vars explicitly, never by editing this file.
+// Defaults are conservative on purpose. To use higher values, set the env
+// variables below at boot — don't edit this file directly.
 
 const num = (envValue, fallback, { min = 0, max = Infinity } = {}) => {
   const v = Number(envValue)
@@ -17,7 +17,9 @@ const bool = (envValue, fallback) => {
 
 export const SAFE_TEST_MODE = bool(process.env.SAFE_TEST_MODE, false)
 
-// Conservative defaults. Override per environment via env vars.
+// Defaults are sized so the Bulk API is actually used as a batch API (it's
+// the point of using it) while keeping concurrency and pacing modest. Override
+// per environment via env vars when capacity has been coordinated upstream.
 //
 //   BULK_API_CHUNK_SIZE             recipients per Bulk API request
 //   BULK_API_MAX_CONCURRENCY        parallel Bulk API requests per job
@@ -26,7 +28,11 @@ export const SAFE_TEST_MODE = bool(process.env.SAFE_TEST_MODE, false)
 //   BULK_API_MAX_RETRIES_5XX        max retries on 5xx
 //   BULK_API_MAX_RECIPIENTS_PER_JOB optional hard cap; reject jobs above this
 const baseDefaults = {
-  chunkSize: 100,
+  // 30% of the Bulk API per-request capacity (max is 10,000). Large enough to
+  // actually batch, small enough to keep cancel-latency and blast radius
+  // reasonable. Dedup defenses upstream guarantee that no chunk contains
+  // duplicate recipients regardless of size.
+  chunkSize: 3000,
   maxConcurrency: 1,
   delayBetweenBatchesMs: 500,
   maxRetries429: 3,
