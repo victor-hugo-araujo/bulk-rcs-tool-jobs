@@ -1,4 +1,4 @@
-import { Settings, Users, MessageSquare, BarChart3, Send, CheckCircle, Menu, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
+import { Settings, Users, MessageSquare, BarChart3, Send, CheckCircle, Menu, ChevronLeft, ChevronRight, RotateCcw, KeyRound } from 'lucide-react'
 import { useState } from 'react'
 
 const Navigation = ({ 
@@ -41,6 +41,12 @@ const Navigation = ({
       label: 'Sending',
       icon: Send,
       description: 'Send & Results'
+    },
+    {
+      id: 'credentials',
+      label: 'Credentials & Senders',
+      icon: KeyRound,
+      description: 'Saved locally (advanced)'
     }
   ]
 

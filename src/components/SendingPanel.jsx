@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Send, Clock, Calendar, Users, DollarSign, AlertTriangle, CheckCircle } from 'lucide-react'
+import { Send, Clock, Calendar, Users, DollarSign, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
 import ScheduleSuccessModal from './ScheduleSuccessModal'
 import { getSmsPricing, getWhatsAppRateCards } from '../services/smsService'
 import {
@@ -30,11 +30,15 @@ const SendingPanel = ({
   updateScheduling,
   lastScheduledMessage = null,
   clearLastScheduledMessage,
+  onCancelJob,
+  currentJobId,
+  jobStatus,
   messageDelay = 1000
 }) => {
   const panelRef = useRef(null)
   const [sendingMode, setSendingMode] = useState('immediate')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [smsEstimatedRate, setSmsEstimatedRate] = useState(null)
   const [smsPricingLoading, setSmsPricingLoading] = useState(false)
@@ -397,15 +401,49 @@ const SendingPanel = ({
       {/* Send Progress */}
       {(sending || progress > 0) && (
         <div className="border border-gray-200 rounded-lg p-4">
-          <h4 className="font-semibold text-gray-900 mb-3">Sending Progress</h4>
-          
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-gray-900">
+              {jobStatus === 'cancelling' ? 'Cancelling…'
+                : jobStatus === 'cancelled' ? 'Cancelled'
+                : 'Sending Progress'}
+            </h4>
+            {sending && currentJobId && onCancelJob && jobStatus !== 'cancelling' && jobStatus !== 'cancelled' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (isCancelling) return
+                  if (!window.confirm('Cancel this send job? Messages already submitted to Twilio cannot be recalled, but pending batches will stop.')) return
+                  setIsCancelling(true)
+                  try {
+                    await onCancelJob()
+                  } catch (err) {
+                    alert(`Failed to cancel: ${err.message}`)
+                  } finally {
+                    setIsCancelling(false)
+                  }
+                }}
+                disabled={isCancelling}
+                className="inline-flex items-center px-3 py-1.5 text-sm rounded-md border border-red-300 text-red-700 bg-white hover:bg-red-50 disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4 mr-1" />
+                {isCancelling ? 'Cancelling…' : 'Cancel send'}
+              </button>
+            )}
+            {jobStatus === 'cancelling' && (
+              <span className="inline-flex items-center text-sm text-amber-700">
+                <XCircle className="w-4 h-4 mr-1" />
+                Finishing current batch then stopping…
+              </span>
+            )}
+          </div>
+
           <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-            <div 
-              className="bg-green-500 h-3 rounded-full transition-all duration-300" 
+            <div
+              className="bg-green-500 h-3 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
-          
+
           <div className="flex justify-between text-sm text-gray-600">
             <span>{Math.round(progress)}% complete</span>
             {results && (

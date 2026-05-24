@@ -71,11 +71,33 @@ export const useSettings = () => {
 
     if (senderConfig.type === 'phone') {
       if (!senderConfig.phoneNumber) {
-        throw new Error('Please enter a phone number')
+        throw new Error('Please enter a sender address')
       }
-      
-      if (!senderConfig.phoneNumber.startsWith('+')) {
-        throw new Error('Phone number must include country code (e.g., +1234567890)')
+
+      const raw = String(senderConfig.phoneNumber).trim()
+      const channel = senderConfig.channel
+
+      // Strip any channel prefix the user may have typed.
+      const stripped = raw.replace(/^(whatsapp:|rcs:)/i, '')
+
+      const isE164 = /^\+[1-9]\d{1,14}$/.test(stripped)
+      const isShortCode = /^\d{3,8}$/.test(stripped)
+      const isAlphaSender = /^[A-Za-z][A-Za-z0-9 ]{2,10}$/.test(stripped)
+      const isRcsAgent = /^[A-Za-z][A-Za-z0-9_-]*$/.test(stripped) && stripped.length >= 3
+
+      if (channel === 'sms') {
+        if (!(isE164 || isShortCode || isAlphaSender)) {
+          throw new Error('SMS sender must be a phone number in E.164 (+1234567890), a 3–8 digit short code, or an alphanumeric sender (3–11 chars)')
+        }
+      } else if (channel === 'whatsapp') {
+        if (!isE164) {
+          throw new Error('WhatsApp sender must be a phone number in E.164 format (e.g., +14155238886). The "whatsapp:" prefix is optional.')
+        }
+      } else if (channel === 'rcs') {
+        // RCS accepts an agent ID (e.g., "my_agent" or "rcs:my_agent") OR an RBM-enabled phone (E.164).
+        if (!(isE164 || isRcsAgent)) {
+          throw new Error('RCS sender must be an agent ID (e.g., rcs:my_agent) or a phone number in E.164 format')
+        }
       }
     } else if (senderConfig.type === 'messaging-service') {
       if (!senderConfig.messagingServiceSid) {

@@ -20,6 +20,9 @@ const SendingSection = ({
   sending,
   progress,
   results,
+  currentJobId,
+  jobStatus,
+  onCancelJob,
   scheduledSending,
   updateScheduling,
   lastScheduledMessage,
@@ -69,6 +72,9 @@ const SendingSection = ({
         sending={sending}
         progress={progress}
         results={results}
+        currentJobId={currentJobId}
+        jobStatus={jobStatus}
+        onCancelJob={onCancelJob}
         scheduledSending={scheduledSending}
         updateScheduling={updateScheduling}
         lastScheduledMessage={lastScheduledMessage}

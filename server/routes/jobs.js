@@ -1,7 +1,7 @@
 import * as Jobs from '../db/jobs.js'
 import * as Contacts from '../db/contacts.js'
 import { streamCsvFromRequest } from '../lib/csvStream.js'
-import { enqueueJob } from '../worker.js'
+import { enqueueJob, queueSnapshot } from '../worker.js'
 
 const SUPPORTED_CHANNELS = ['sms', 'whatsapp', 'rcs']
 
@@ -115,14 +115,37 @@ export function registerJobRoutes(app) {
   })
 
   app.get('/api/jobs', (_req, res) => {
-    res.json({ jobs: Jobs.listJobs(50) })
+    const snapshot = queueSnapshot()
+    res.json({
+      jobs: Jobs.listJobs(50),
+      queue: {
+        pending: snapshot.pending,
+        depth: snapshot.pending.length,
+        draining: snapshot.isDraining
+      }
+    })
   })
 
+  // DELETE behaves differently depending on the job's current status:
+  //   - pending or processing → flag as 'cancelling'; worker stops after next batch
+  //   - cancelling             → idempotent (already cancelling)
+  //   - completed/failed/cancelled → physically remove from DB
   app.delete('/api/jobs/:id', (req, res) => {
     const job = Jobs.getJob(req.params.id)
     if (!job) return res.status(404).json({ error: 'Job not found' })
+
+    if (job.status === 'pending' || job.status === 'processing') {
+      Jobs.requestCancel(req.params.id)
+      return res.json({ success: true, action: 'cancelling', message: 'Cancellation requested — worker will stop after the next batch.' })
+    }
+
+    if (job.status === 'cancelling') {
+      return res.json({ success: true, action: 'cancelling', message: 'Cancellation already in progress.' })
+    }
+
+    // Terminal state — remove the row + any leftover contacts.
     Contacts.deleteByJob(req.params.id)
     Jobs.remove(req.params.id)
-    res.json({ success: true })
+    res.json({ success: true, action: 'removed' })
   })
 }

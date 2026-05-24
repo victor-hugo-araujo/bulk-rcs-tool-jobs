@@ -21,6 +21,8 @@ const limiter = rateLimit({
     if (path === '/conversations-token' || path === '/conversations' || /^\/conversations\/.+/.test(path)) return true;
     // The job endpoints are polled frequently by the UI; rate-limiting them would break progress updates.
     if (path === '/jobs' || /^\/jobs(\/.+)?$/.test(path)) return true;
+    // Local-only settings storage — no rate limit needed.
+    if (/^\/settings(\/.+)?$/.test(path)) return true;
     return false;
   },
 });

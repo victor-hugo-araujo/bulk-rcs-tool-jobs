@@ -87,15 +87,22 @@ export function incrementCounters(id, { successful = 0, failed = 0 }) {
   incrementCountersStmt.run(successful, failed, id)
 }
 
-export function complete(id, { successful, failed, error = null }) {
+export function complete(id, { successful, failed, error = null, status = null }) {
+  const finalStatus = status || (error ? 'failed' : 'completed')
   updateCompletionStmt.run(
-    error ? 'failed' : 'completed',
+    finalStatus,
     successful,
     failed,
     Date.now(),
     error || null,
     id
   )
+}
+
+// Mark a still-running or pending job as cancelling. The worker reads this
+// between batches and stops processing on the next iteration.
+export function requestCancel(id) {
+  updateStatusStmt.run('cancelling', Date.now(), id)
 }
 
 export function remove(id) {

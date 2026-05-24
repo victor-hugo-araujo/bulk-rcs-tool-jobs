@@ -62,3 +62,6 @@ temp/
 
 # Local SQLite database (job queue + transient contacts)
 server/data/
+
+# Local load-test config — contains Twilio credentials, never commit
+tools/config.test.sh

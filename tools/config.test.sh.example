@@ -1,0 +1,25 @@
+# Copy this file to tools/config.test.sh and fill in your values.
+# Keep config.test.sh out of git (already in .gitignore via *.local pattern,
+# or add it explicitly).
+
+# --- Twilio credentials (use TEST credentials when load-testing!) -----------
+# Get them at: https://console.twilio.com → Account → API Keys & Tokens → Test Credentials
+export ACCOUNT_SID="ACtest_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export AUTH_TOKEN="test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# --- Channel: sms | whatsapp | rcs ------------------------------------------
+export CHANNEL="rcs"
+
+# --- Sender: phone OR messaging-service -------------------------------------
+export SENDER_TYPE="phone"
+export FROM_ADDRESS="rcs:twilio_u2uiovol_agent"
+# Or, if SENDER_TYPE=messaging-service:
+# export MG_SID="MG..."
+
+# --- Message body (use {{name}} {{city}} for per-recipient personalization) -
+export MESSAGE="Olá {{name}}, mensagem de teste de carga."
+# Optional media URL:
+# export MEDIA_URL="https://example.com/banner.jpg"
+
+# --- Optional: where the server lives ---------------------------------------
+# export BASE_URL="http://localhost:3001"

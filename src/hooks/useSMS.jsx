@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { createBulkJob, getJob } from '../services/smsService'
+import { createBulkJob, getJob, cancelJob } from '../services/smsService'
 import { SMS_LIMITS, CONTACT_STATUS } from '../utils/constants'
 
 const POLL_INTERVAL_MS = 2500
@@ -9,6 +9,7 @@ export const useSMS = () => {
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState({ success: 0, failed: 0, errors: [] })
   const [currentJobId, setCurrentJobId] = useState(null)
+  const [jobStatus, setJobStatus] = useState(null) // mirrors backend status: pending|processing|cancelling|cancelled|completed|failed
   const pollTimer = useRef(null)
 
   const stopPolling = useCallback(() => {
@@ -31,13 +32,17 @@ export const useSMS = () => {
         }
 
         setProgress(job.progress || 0)
+        setJobStatus(job.status)
         setResults({
           success: job.successful || 0,
           failed: job.failed || 0,
           errors: job.error ? [job.error] : []
         })
 
-        if (job.status === 'completed' || job.status === 'failed') {
+        // Terminal states — stop polling, release the UI, and notify caller.
+        // 'cancelled' was missing before, which caused the UI to hang on "Sending..."
+        // after the user pressed Cancel.
+        if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
           stopPolling()
           setSending(false)
           if (onDone) onDone(job)
@@ -79,11 +84,14 @@ export const useSMS = () => {
 
       return await new Promise((resolve, reject) => {
         pollUntilDone(jobId, (job) => {
-          // Per-contact statuses aren't returned (the DB rows are deleted at the
-          // end of the job to keep the local file small). We surface totals only.
-          if (contacts && onContactUpdate) {
-            contacts.forEach((c) => onContactUpdate?.(c.phone, CONTACT_STATUS.SENT))
-          }
+          // Per-contact status updates were removed. With the Bulk Messaging
+          // API we only get aggregate counts (sent/failed/total). The previous
+          // implementation iterated every contact calling onContactUpdate,
+          // which for 300k contacts triggered O(N²) work on the React state
+          // and froze the browser (~90 billion ops).
+          //
+          // The aggregate totals are surfaced via `progress` / `results`
+          // already, which is what the UI shows during/after the job.
           if (job.error) reject(new Error(job.error))
           else resolve({ success: job.successful, failed: job.failed, errors: job.error ? [job.error] : [], invalid })
         })
@@ -111,7 +119,19 @@ export const useSMS = () => {
     setProgress(0)
     setResults({ success: 0, failed: 0, errors: [] })
     setCurrentJobId(null)
+    setJobStatus(null)
   }, [stopPolling])
+
+  const cancelCurrentJob = useCallback(async () => {
+    if (!currentJobId) return null
+    try {
+      const result = await cancelJob(currentJobId)
+      return result
+    } catch (err) {
+      console.error('Failed to cancel job:', err)
+      throw err
+    }
+  }, [currentJobId])
 
   const getMessageAnalytics = useCallback((message) => {
     if (!message) return null
@@ -140,7 +160,9 @@ export const useSMS = () => {
     progress,
     results,
     currentJobId,
+    jobStatus,
     sendBulkMessages,
+    cancelCurrentJob,
     validateMessage,
     resetSendingState,
     getMessageAnalytics

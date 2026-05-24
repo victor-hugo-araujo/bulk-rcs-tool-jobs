@@ -401,15 +401,21 @@ const SenderConfiguration = ({
                   channel === 'whatsapp'
                     ? 'Enter your WhatsApp-enabled Twilio number (e.g., +14155238886)'
                     : channel === 'rcs'
-                      ? 'Enter your RCS-enabled Twilio sender (e.g., +1234567890)'
-                      : 'Enter your Twilio phone number (e.g., +1234567890)'
+                      ? 'RCS agent ID (e.g., rcs:twilio_agent_123) or +E.164'
+                      : 'Phone (+1234567890), short code (12345), or alphanumeric sender (MyBrand)'
                 }
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:shadow-lg transition-shadow"
               />
               <p className="text-xs text-gray-500 mt-2">
-                Must include country code in E.164 format (e.g., +1 for US, +57 for Colombia).
-                {channel === 'whatsapp' && ' The app will automatically send using the whatsapp: prefix.'}
-                {channel === 'rcs' && ' For RCS we recommend using a Messaging Service that includes an approved RCS agent.'}
+                {channel === 'sms' && (
+                  <>Accepts an E.164 phone number (e.g., +1234567890), a 3–8 digit short code, or an alphanumeric sender ID (3–11 chars, letters/digits).</>
+                )}
+                {channel === 'whatsapp' && (
+                  <>Must include country code in E.164 format (e.g., +14155238886). The "whatsapp:" prefix is added automatically.</>
+                )}
+                {channel === 'rcs' && (
+                  <>Accepts an RCS agent ID (with or without the "rcs:" prefix) or an RBM-enabled phone in E.164. For automatic SMS fallback, use a Messaging Service instead.</>
+                )}
               </p>
             </>
           )}

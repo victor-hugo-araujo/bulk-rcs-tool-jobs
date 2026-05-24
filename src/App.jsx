@@ -7,6 +7,7 @@ import { useContacts } from './hooks/useContacts'
 import { useSettings } from './hooks/useSettings'
 import { useScheduler } from './hooks/useScheduler'
 import { useSMS } from './hooks/useSMS'
+import { useSavedSettings } from './hooks/useSavedSettings'
 
 // Components - Reorganized
 import AppHeader from './components/AppHeader'
@@ -62,7 +63,13 @@ function App() {
   }
 
   // Computed values
-  const validationSummary = contactsHook.getValidationSummary()
+  // Memoize on contacts identity — validateContacts iterates the whole array
+  // (~300ms for 300k contacts) and was being called on every render of App,
+  // burning ~40% of the main thread when the polling fired setStates.
+  const validationSummary = useMemo(
+    () => contactsHook.getValidationSummary(),
+    [contactsHook.contacts]
+  )
   const isWhatsAppChannel = settingsHook.senderConfig.channel === 'whatsapp'
   const isRcsChannel = settingsHook.senderConfig.channel === 'rcs'
   const isTemplateConfigured = !!contentTemplate?.contentSid && Object.values(contentTemplate?.variables || {}).every(value => String(value).trim().length > 0)
@@ -100,12 +107,21 @@ function App() {
         contentTemplate,
         mediaUrl,
         twilioConfig: settingsHook.twilioConfig,
-        senderConfig: settingsHook.senderConfig,
-        onContactUpdate: contactsHook.updateContactStatus
+        senderConfig: settingsHook.senderConfig
+        // onContactUpdate removed — Bulk API doesn't return per-contact status,
+        // and iterating all contacts here was O(N²) with React state updates.
       })
     } catch (error) {
       console.error('Send error:', error)
-      alert(`Failed to send messages: ${error.message}`)
+      // Cancellation is a user-initiated stop, not a failure. The worker
+      // surfaces it as `error: "Cancelled by user after N sent"` so we
+      // detect that string and show a neutral message.
+      const isCancellation = /cancel/i.test(error.message)
+      if (isCancellation) {
+        alert(`Send cancelled — ${error.message}.`)
+      } else {
+        alert(`Failed to send messages: ${error.message}`)
+      }
     }
   }
 
@@ -294,6 +310,9 @@ function App() {
                   sending={smsHook.sending}
                   progress={smsHook.progress}
                   results={smsHook.results}
+                  currentJobId={smsHook.currentJobId}
+                  jobStatus={smsHook.jobStatus}
+                  onCancelJob={smsHook.cancelCurrentJob}
                   scheduledSending={schedulerHook.scheduledSending}
                   updateScheduling={schedulerHook.updateScheduling}
                   lastScheduledMessage={schedulerHook.lastScheduledMessage}

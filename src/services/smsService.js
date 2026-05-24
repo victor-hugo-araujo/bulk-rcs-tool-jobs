@@ -48,6 +48,28 @@ export const getJob = async (jobId) => {
   return response.json()
 }
 
+// Cancel a running or pending job. The worker stops after its next batch.
+// Already-submitted batches keep flowing through Twilio (the Bulk API doesn't
+// let us recall a submitted batch).
+export const cancelJob = async (jobId) => {
+  const response = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+// List all jobs (recent + queue snapshot). Used by the UI to render the queue.
+export const listJobs = async () => {
+  const response = await fetch('/api/jobs')
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
 /**
  * Sends bulk messages (SMS or WhatsApp)
  * @param {Object} params - Bulk SMS parameters

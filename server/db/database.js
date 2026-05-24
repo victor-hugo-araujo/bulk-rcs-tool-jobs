@@ -62,5 +62,21 @@ export function withTransaction(fn) {
   }
 }
 
+// Reclaim disk space after large deletes.
+// SQLite doesn't shrink the file when rows are deleted — it just marks pages
+// as free for future inserts. To actually return space to the OS we have to:
+//   1. Drain the WAL file (which can be tens of MB after a big job)
+//   2. Run VACUUM to rebuild the main DB without free pages
+// Cheap for small DBs, can take seconds for very large ones. Call after job
+// completion, not on hot paths.
+export function compact() {
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    db.exec('VACUUM')
+  } catch (err) {
+    console.warn('[db] compact() failed:', err.message)
+  }
+}
+
 export default db
 export { DB_PATH }

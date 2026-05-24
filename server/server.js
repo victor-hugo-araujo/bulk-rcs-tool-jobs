@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import app from './app.js';
 import { registerJobRoutes } from './routes/jobs.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { recoverOnBoot } from './worker.js';
 
 const uuidv4 = () => crypto.randomUUID();
@@ -1933,6 +1934,9 @@ app.get('/api/health', (req, res) => {
 
 // New job-based bulk send endpoints (multipart streaming + worker + SQLite).
 registerJobRoutes(app);
+
+// Local persistence for credentials + saved senders.
+registerSettingsRoutes(app);
 
 // Serve the built React UI when present (one-command mode).
 const __dirnameServer = dirname(fileURLToPath(import.meta.url));
