@@ -157,9 +157,12 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
 
   if (useTemplate) {
     // Reference a pre-stored Content template (from Content Template Builder).
-    // Per Twilio's Bulk Messaging docs, content can carry a "pre-stored Content
-    // template"; the schema field is `messageContentTemplate` with a `contentSid`.
-    body.content.messageContentTemplate = { contentSid: contentTemplate.contentSid }
+    // The Bulk Messaging API uses the type `MessageContentTemplate` and the
+    // identifier property is `contentId` (NOT `contentSid` as in the regular
+    // Messages API — the Bulk API renamed the same HX... identifier).
+    // Per-recipient values for the template's placeholders go in each
+    // recipient's `variables` object.
+    body.content.messageContentTemplate = { contentId: contentTemplate.contentSid }
   } else {
     if (message) {
       body.content.text = toLiquid(message)
