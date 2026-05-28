@@ -87,17 +87,26 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
     throw new Error(`Bulk batch size must be <= ${MAX_BATCH_SIZE}`)
   }
 
-  if (contentTemplate?.contentSid) {
-    return {
-      successful: [],
-      failed: contacts.map((c) => ({
-        contactId: c.id,
-        error: 'Twilio Bulk Messaging API does not support Content templates (contentSid). Use the free-text composer with Liquid placeholders for bulk sends.'
-      }))
-    }
-  }
-
   const channelCfg = channelMap[channel] || channelMap.sms
+  const useTemplate = !!contentTemplate?.contentSid
+
+  // For template sends, the user-supplied template variable values may include
+  // {column} placeholders that should be replaced with the contact's CSV
+  // columns before being passed to Twilio. (Twilio substitutes the resolved
+  // values into the stored template at send time.)
+  const resolveTemplateVarsForContact = (contact) => {
+    const out = {}
+    const tplVars = contentTemplate?.variables || {}
+    const ctxVars = contact.variables || {}
+    for (const [key, rawValue] of Object.entries(tplVars)) {
+      let v = String(rawValue ?? '')
+      for (const [col, colVal] of Object.entries(ctxVars)) {
+        v = v.replace(new RegExp(`\\{${col}\\}`, 'gi'), String(colVal ?? ''))
+      }
+      out[key] = v
+    }
+    return out
+  }
 
   // Safety-net dedup. The CSV stream already drops duplicates; this is a
   // second line of defense in case a future code path bypasses it (manual
@@ -126,8 +135,14 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
   }
 
   const recipients = uniqueContacts.map((contact) => {
-    const variables = contact.variables || {}
     const address = normalizePhone(contact.phone)
+    // When sending a template, the per-recipient `variables` are the values
+    // that map to the template's placeholders (e.g. {"1": "Alice", "2": "$10"}).
+    // For free-text sends, we pass all CSV columns so Liquid placeholders
+    // anywhere in content.text / content.media can resolve.
+    const variables = useTemplate
+      ? resolveTemplateVarsForContact(contact)
+      : (contact.variables || {})
     return {
       address,
       channel: channelCfg.to,
@@ -140,12 +155,18 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
     content: {}
   }
 
-  if (message) {
-    body.content.text = toLiquid(message)
-  }
-
-  if (mediaUrl) {
-    body.content.media = [{ url: toLiquid(String(mediaUrl)) }]
+  if (useTemplate) {
+    // Reference a pre-stored Content template (from Content Template Builder).
+    // Per Twilio's Bulk Messaging docs, content can carry a "pre-stored Content
+    // template"; the schema field is `messageContentTemplate` with a `contentSid`.
+    body.content.messageContentTemplate = { contentSid: contentTemplate.contentSid }
+  } else {
+    if (message) {
+      body.content.text = toLiquid(message)
+    }
+    if (mediaUrl) {
+      body.content.media = [{ url: toLiquid(String(mediaUrl)) }]
+    }
   }
 
   // Sender: the Bulk Messaging API only accepts {address, channel} in `from`.
