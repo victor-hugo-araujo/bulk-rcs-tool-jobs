@@ -45,8 +45,10 @@ const toLiquid = (template) => {
   // 2. Bare Liquid `{{var}}` (no filter) → add `| default: ''`.
   //    Matches only when the variable is followed by whitespace then `}}`,
   //    so anything piping through filters is left untouched.
+  //    Also matches numeric-only placeholders like `{{1}}` (common in Twilio
+  //    Content templates with positional variables).
   out = out.replace(
-    /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,
+    /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
     "{{ $1 | default: '' }}"
   )
 
@@ -156,16 +158,12 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
   }
 
   if (useTemplate) {
-    // Reference a pre-stored Content template (from Content Template Builder).
-    //
-    // The Bulk Messaging API uses PascalCase for compound type wrappers
-    // (`MessageContentTemplate`) even though primitive content keys
-    // (`text`, `media`) are lowercase. The identifier property is `contentId`
-    // (Bulk API rename of the regular `ContentSid` — same HX... identifier).
-    //
-    // Per-recipient values for the template's placeholders go in each
-    // recipient's `variables` object.
-    body.content.MessageContentTemplate = { contentId: contentTemplate.contentSid }
+    // Reference a pre-stored Content template (from the Content Template
+    // Builder). The Bulk Messaging API accepts a flat `contentId` directly
+    // under `content`. Per-recipient values for the template's placeholders
+    // go in each recipient's `variables` object — Twilio resolves them
+    // server-side against the stored template body.
+    body.content.contentId = contentTemplate.contentSid
   } else {
     if (message) {
       body.content.text = toLiquid(message)
