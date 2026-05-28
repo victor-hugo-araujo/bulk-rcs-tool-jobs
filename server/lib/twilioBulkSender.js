@@ -157,12 +157,15 @@ export async function sendBulkBatch({ contacts, message, mediaUrl, contentTempla
 
   if (useTemplate) {
     // Reference a pre-stored Content template (from Content Template Builder).
-    // The Bulk Messaging API uses the type `MessageContentTemplate` and the
-    // identifier property is `contentId` (NOT `contentSid` as in the regular
-    // Messages API — the Bulk API renamed the same HX... identifier).
+    //
+    // The Bulk Messaging API uses PascalCase for compound type wrappers
+    // (`MessageContentTemplate`) even though primitive content keys
+    // (`text`, `media`) are lowercase. The identifier property is `contentId`
+    // (Bulk API rename of the regular `ContentSid` — same HX... identifier).
+    //
     // Per-recipient values for the template's placeholders go in each
     // recipient's `variables` object.
-    body.content.messageContentTemplate = { contentId: contentTemplate.contentSid }
+    body.content.MessageContentTemplate = { contentId: contentTemplate.contentSid }
   } else {
     if (message) {
       body.content.text = toLiquid(message)
